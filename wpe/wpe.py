@@ -1,3 +1,6 @@
+# The functions in this module are modified from:
+# https://github.com/fgnt/nara_wpe/blob/master/nara_wpe/wpe.py
+
 import functools
 import operator
 
@@ -20,137 +23,6 @@ def segment_axis(
     pad_mode="constant",
     pad_value=0,
 ):
-
-    """Generate a new array that chops the given array along the given axis
-     into overlapping frames.
-
-    Note: if end='pad' the return is maybe a copy
-
-    Args:
-        x: The array to segment
-        length: The length of each frame
-        shift: The number of array elements by which to step forward
-               Negative values are also allowed.
-        axis: The axis to operate on; if None, act on the flattened array
-        end: What to do with the last frame, if the array is not evenly
-                divisible into pieces. Options are:
-                * 'cut'   Simply discard the extra values
-                * None    No end treatment. Only works when fits perfectly.
-                * 'pad'   Pad with a constant value
-                * 'conv_pad' Special padding for convolution, assumes
-                             shift == 1, see example below
-        pad_mode: see numpy.pad
-        pad_value: The value to use for end='pad'
-
-    Examples:
-        >>> # import cupy as np
-        >>> segment_axis(np.arange(10), 4, 2)  # simple example
-        array([[0, 1, 2, 3],
-               [2, 3, 4, 5],
-               [4, 5, 6, 7],
-               [6, 7, 8, 9]])
-        >>> segment_axis(np.arange(10), 4, -2)  # negative shift
-        array([[6, 7, 8, 9],
-               [4, 5, 6, 7],
-               [2, 3, 4, 5],
-               [0, 1, 2, 3]])
-        >>> segment_axis(np.arange(5).reshape(5), 4, 1, axis=0)
-        array([[0, 1, 2, 3],
-               [1, 2, 3, 4]])
-        >>> segment_axis(np.arange(5).reshape(5), 4, 2, axis=0, end='cut')
-        array([[0, 1, 2, 3]])
-        >>> segment_axis(np.arange(5).reshape(5), 4, 2, axis=0, end='pad')
-        array([[0, 1, 2, 3],
-               [2, 3, 4, 0]])
-        >>> segment_axis(np.arange(5).reshape(5), 4, 1, axis=0, end='conv_pad')
-        array([[0, 0, 0, 0],
-               [0, 0, 0, 1],
-               [0, 0, 1, 2],
-               [0, 1, 2, 3],
-               [1, 2, 3, 4],
-               [2, 3, 4, 0],
-               [3, 4, 0, 0],
-               [4, 0, 0, 0]])
-        >>> segment_axis(np.arange(6).reshape(6), 4, 2, axis=0, end='pad')
-        array([[0, 1, 2, 3],
-               [2, 3, 4, 5]])
-        >>> segment_axis(np.arange(10).reshape(2, 5), 4, 1, axis=-1)
-        array([[[0, 1, 2, 3],
-                [1, 2, 3, 4]],
-        <BLANKLINE>
-               [[5, 6, 7, 8],
-                [6, 7, 8, 9]]])
-        >>> segment_axis(np.arange(10).reshape(5, 2).T, 4, 1, axis=1)
-        array([[[0, 2, 4, 6],
-                [2, 4, 6, 8]],
-        <BLANKLINE>
-               [[1, 3, 5, 7],
-                [3, 5, 7, 9]]])
-        >>> segment_axis(np.asfortranarray(np.arange(10).reshape(2, 5)),
-        ...                 4, 1, axis=1)
-        array([[[0, 1, 2, 3],
-                [1, 2, 3, 4]],
-        <BLANKLINE>
-               [[5, 6, 7, 8],
-                [6, 7, 8, 9]]])
-        >>> segment_axis(np.arange(8).reshape(2, 2, 2).transpose(1, 2, 0),
-        ...                 2, 1, axis=0, end='cut')
-        array([[[[0, 4],
-                 [1, 5]],
-        <BLANKLINE>
-                [[2, 6],
-                 [3, 7]]]])
-        >>> a = np.arange(7).reshape(7)
-        >>> b = segment_axis(a, 4, -2, axis=0, end='cut')
-        >>> a += 1  # a and b point to the same memory
-        >>> b
-        array([[3, 4, 5, 6],
-               [1, 2, 3, 4]])
-
-        >>> segment_axis(np.arange(7), 8, 1, axis=0, end='pad').shape
-        (1, 8)
-        >>> segment_axis(np.arange(8), 8, 1, axis=0, end='pad').shape
-        (1, 8)
-        >>> segment_axis(np.arange(9), 8, 1, axis=0, end='pad').shape
-        (2, 8)
-        >>> segment_axis(np.arange(7), 8, 2, axis=0, end='cut').shape
-        (0, 8)
-        >>> segment_axis(np.arange(8), 8, 2, axis=0, end='cut').shape
-        (1, 8)
-        >>> segment_axis(np.arange(9), 8, 2, axis=0, end='cut').shape
-        (1, 8)
-
-        >>> x = np.arange(1, 10)
-        >>> filter_ = np.array([1, 2, 3])
-        >>> np.convolve(x, filter_)
-        array([ 1,  4, 10, 16, 22, 28, 34, 40, 46, 42, 27])
-        >>> x_ = segment_axis(x, len(filter_), 1, end='conv_pad')
-        >>> x_
-        array([[0, 0, 1],
-               [0, 1, 2],
-               [1, 2, 3],
-               [2, 3, 4],
-               [3, 4, 5],
-               [4, 5, 6],
-               [5, 6, 7],
-               [6, 7, 8],
-               [7, 8, 9],
-               [8, 9, 0],
-               [9, 0, 0]])
-        >>> x_ @ filter_[::-1]  # Equal to convolution
-        array([ 1,  4, 10, 16, 22, 28, 34, 40, 46, 42, 27])
-
-        >>> segment_axis(np.arange(19), 16, 4, axis=-1, end='pad')
-        array([[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15],
-               [ 4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18,  0]])
-
-        >>> import torch
-        >>> segment_axis(torch.tensor(np.arange(10)), 4, 2)  # simple example
-        tensor([[0, 1, 2, 3],
-                [2, 3, 4, 5],
-                [4, 5, 6, 7],
-                [6, 7, 8, 9]])
-    """
     ndim = x.ndim
 
     axis = axis % ndim
@@ -224,81 +96,11 @@ def segment_axis(
 
 
 def _stable_solve(A, B):
-    """
-    Use cp.linalg.solve with fallback to cp.linalg.lstsq.
-    Equal to cp.linalg.lstsq but faster.
-
-    Note: limited currently by A.shape == B.shape
-
-    This function try's np.linalg.solve with independent dimensions,
-    when this is not working the function fall back to np.linalg.solve
-    for each matrix. If one matrix does not work it fall back to
-    np.linalg.lstsq.
-
-    The reason for not using np.linalg.lstsq directly is the execution time.
-    Examples:
-    A and B have the shape (500, 6, 6), than a loop over lstsq takes
-    108 ms and this function 28 ms for the case that one matrix is singular
-    else 1 ms.
-
-    >>> def normal(shape):
-    ...     return np.random.normal(size=shape) + 1j * np.random.normal(size=shape)
-
-    >>> A = normal((6, 6))
-    >>> B = normal((6, 6))
-    >>> C1 = np.linalg.solve(A, B)
-    >>> C2, *_ = np.linalg.lstsq(A, B)
-    >>> C3 = _stable_solve(A, B)
-    >>> C4 = _lstsq(A, B)
-    >>> np.testing.assert_allclose(C1, C2)
-    >>> np.testing.assert_allclose(C1, C3)
-    >>> np.testing.assert_allclose(C1, C4)
-
-    >>> A = np.zeros((6, 6), dtype=np.complex128)
-    >>> B = np.zeros((6, 6), dtype=np.complex128)
-    >>> C1 = np.linalg.solve(A, B)
-    Traceback (most recent call last):
-    ...
-    numpy.linalg.linalg.LinAlgError: Singular matrix
-    >>> C2, *_ = np.linalg.lstsq(A, B)
-    >>> C3 = _stable_solve(A, B)
-    >>> C4 = _lstsq(A, B)
-    >>> np.testing.assert_allclose(C2, C3)
-    >>> np.testing.assert_allclose(C2, C4)
-
-    >>> A = normal((3, 6, 6))
-    >>> B = normal((3, 6, 6))
-    >>> C1 = np.linalg.solve(A, B)
-    >>> C2, *_ = np.linalg.lstsq(A, B)
-    Traceback (most recent call last):
-    ...
-    numpy.linalg.linalg.LinAlgError: 3-dimensional array given. Array must be two-dimensional
-    >>> C3 = _stable_solve(A, B)
-    >>> C4 = _lstsq(A, B)
-    >>> np.testing.assert_allclose(C1, C3)
-    >>> np.testing.assert_allclose(C1, C4)
-
-
-    >>> A[2, 3, :] = 0
-    >>> C1 = np.linalg.solve(A, B)
-    Traceback (most recent call last):
-    ...
-    numpy.linalg.linalg.LinAlgError: Singular matrix
-    >>> C2, *_ = np.linalg.lstsq(A, B)
-    Traceback (most recent call last):
-    ...
-    numpy.linalg.linalg.LinAlgError: 3-dimensional array given. Array must be two-dimensional
-    >>> C3 = _stable_solve(A, B)
-    >>> C4 = _lstsq(A, B)
-    >>> np.testing.assert_allclose(C3, C4)
-
-
-    """
     assert A.shape[:-2] == B.shape[:-2], (A.shape, B.shape)
     assert A.shape[-1] == B.shape[-2], (A.shape, B.shape)
     try:
         return cp.linalg.solve(A, B)
-    except cp.linalg.linalg.LinAlgError:
+    except:
         shape_A, shape_B = A.shape, B.shape
         assert shape_A[:-2] == shape_A[:-2]
         working_shape_A = get_working_shape(shape_A)
@@ -317,50 +119,6 @@ def _stable_solve(A, B):
 
 
 def build_y_tilde(Y, taps, delay):
-    """
-
-    Note: The returned y_tilde consumes a similar amount of memory as Y, because
-        of tricks with strides. Usually the memory consumprion is K times
-        smaller than the memory consumprion of a contignous array,
-
-    >>> T, D = 20, 2
-    >>> Y = np.arange(start=1, stop=T * D + 1).reshape([T, D]).T
-    >>> print(Y)
-    [[ 1  3  5  7  9 11 13 15 17 19 21 23 25 27 29 31 33 35 37 39]
-     [ 2  4  6  8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40]]
-    >>> taps, delay = 4, 2
-    >>> Y_tilde = build_y_tilde(Y, taps, delay)
-    >>> print(Y_tilde.shape, (taps*D, T))
-    (8, 20) (8, 20)
-    >>> print(Y_tilde)
-    [[ 0  0  1  3  5  7  9 11 13 15 17 19 21 23 25 27 29 31 33 35]
-     [ 0  0  2  4  6  8 10 12 14 16 18 20 22 24 26 28 30 32 34 36]
-     [ 0  0  0  1  3  5  7  9 11 13 15 17 19 21 23 25 27 29 31 33]
-     [ 0  0  0  2  4  6  8 10 12 14 16 18 20 22 24 26 28 30 32 34]
-     [ 0  0  0  0  1  3  5  7  9 11 13 15 17 19 21 23 25 27 29 31]
-     [ 0  0  0  0  2  4  6  8 10 12 14 16 18 20 22 24 26 28 30 32]
-     [ 0  0  0  0  0  1  3  5  7  9 11 13 15 17 19 21 23 25 27 29]
-     [ 0  0  0  0  0  2  4  6  8 10 12 14 16 18 20 22 24 26 28 30]]
-    >>> Y_tilde = build_y_tilde(Y, taps, 0)
-    >>> print(Y_tilde.shape, (taps*D, T), Y_tilde.strides)
-    (8, 20) (8, 20) (-8, 16)
-    >>> print('Pseudo size:', Y_tilde.nbytes)
-    Pseudo size: 1280
-    >>> print('Reak size:', Y_tilde.base.base.base.base.nbytes)
-    Reak size: 368
-    >>> print(Y_tilde)
-    [[ 1  3  5  7  9 11 13 15 17 19 21 23 25 27 29 31 33 35 37 39]
-     [ 2  4  6  8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40]
-     [ 0  1  3  5  7  9 11 13 15 17 19 21 23 25 27 29 31 33 35 37]
-     [ 0  2  4  6  8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38]
-     [ 0  0  1  3  5  7  9 11 13 15 17 19 21 23 25 27 29 31 33 35]
-     [ 0  0  2  4  6  8 10 12 14 16 18 20 22 24 26 28 30 32 34 36]
-     [ 0  0  0  1  3  5  7  9 11 13 15 17 19 21 23 25 27 29 31 33]
-     [ 0  0  0  2  4  6  8 10 12 14 16 18 20 22 24 26 28 30 32 34]]
-
-    The first columns are zero because of the delay.
-
-    """
     S = Y.shape[:-2]
     D = Y.shape[-2]
     T = Y.shape[-1]
@@ -390,6 +148,76 @@ def hermite(x):
     return x.swapaxes(-2, -1).conj()
 
 
+def get_power_inverse(signal, psd_context=0):
+    power = cp.mean(abs_square(signal), axis=-2)
+
+    if np.isposinf(psd_context):
+        power = cp.broadcast_to(cp.mean(power, axis=-1, keepdims=True), power.shape)
+    elif psd_context > 0:
+        assert int(psd_context) == psd_context, psd_context
+        psd_context = int(psd_context)
+        power = window_mean(power, (psd_context, psd_context))
+    elif psd_context == 0:
+        pass
+    else:
+        raise ValueError(psd_context)
+    return _stable_positive_inverse(power)
+
+
+def abs_square(x):
+    if cp.iscomplexobj(x):
+        return x.real**2 + x.imag**2
+    else:
+        return x**2
+
+
+def window_mean(x, lr_context, axis=-1):
+    if isinstance(lr_context, int):
+        lr_context = [lr_context + 1, lr_context]
+    else:
+        assert len(lr_context) == 2, lr_context
+        tmp_l_context, tmp_r_context = lr_context
+        lr_context = tmp_l_context + 1, tmp_r_context
+
+    x = cp.asarray(x)
+
+    window_length = sum(lr_context)
+    if window_length == 0:
+        return x
+
+    pad_width = np.zeros((x.ndim, 2), dtype=np.int64)
+    pad_width[axis] = lr_context
+
+    first_slice = [slice(None)] * x.ndim
+    first_slice[axis] = slice(sum(lr_context), None)
+    second_slice = [slice(None)] * x.ndim
+    second_slice[axis] = slice(None, -sum(lr_context))
+
+    def foo(x):
+        cumsum = cp.cumsum(cp.pad(x, pad_width, mode="constant"), axis=axis)
+        return cumsum[first_slice] - cumsum[second_slice]
+
+    ones_shape = [1] * x.ndim
+    ones_shape[axis] = x.shape[axis]
+
+    return foo(x) / foo(cp.ones(ones_shape, cp.int64))
+
+
+def _stable_positive_inverse(power):
+    eps = 1e-10 * cp.max(power)
+    if eps == 0:
+        # Special case when signal is zero.
+        # Does not happen on real data.
+        # This only happens in artificial cases, e.g. redacted signal parts,
+        # where the signal is set to be zero from a human.
+        #
+        # The scale of the power does not matter, so take 1.
+        inverse_power = cp.ones_like(power)
+    else:
+        inverse_power = 1 / cp.maximum(power, eps)
+    return inverse_power
+
+
 def wpe(Y, taps=10, delay=3, iterations=3, psd_context=0, statistics_mode="full"):
     """
     Batched WPE implementation (same as wpe_v6 in nara_wpe)
@@ -397,7 +225,7 @@ def wpe(Y, taps=10, delay=3, iterations=3, psd_context=0, statistics_mode="full"
     Applicable in for-loops.
 
     Args:
-        Y: Complex valued STFT signal with shape (..., D, T).
+        Y: Complex valued STFT signal with shape (F, D, T).
         taps: Filter order
         delay: Delay as a guard interval, such that X does not become zero.
         iterations:
@@ -433,162 +261,3 @@ def wpe(Y, taps=10, delay=3, iterations=3, psd_context=0, statistics_mode="full"
         X = Y - cp.matmul(hermite(G), Y_tilde)
 
     return X
-
-
-def get_power_inverse(signal, psd_context=0):
-    """
-    Assumes single frequency bin with shape (D, T).
-
-    >>> s = 1 / np.array([np.arange(1, 6)]*3)
-    >>> get_power_inverse(s)
-    array([ 1.,  4.,  9., 16., 25.])
-    >>> get_power_inverse(s * 0 + 1, 1)
-    array([1., 1., 1., 1., 1.])
-    >>> get_power_inverse(s, 1)
-    array([ 1.6       ,  2.20408163,  7.08196721, 14.04421326, 19.51219512])
-    >>> get_power_inverse(s, np.inf)
-    array([3.41620801, 3.41620801, 3.41620801, 3.41620801, 3.41620801])
-    >>> get_power_inverse(s * 0.)
-    array([1., 1., 1., 1., 1.])
-    """
-    power = cp.mean(abs_square(signal), axis=-2)
-
-    if np.isposinf(psd_context):
-        power = cp.broadcast_to(cp.mean(power, axis=-1, keepdims=True), power.shape)
-    elif psd_context > 0:
-        assert int(psd_context) == psd_context, psd_context
-        psd_context = int(psd_context)
-        # import bottleneck as bn
-        # Handle the corner case correctly (i.e. sum() / count)
-        # Use bottleneck when only left context is requested
-        # power = bn.move_mean(power, psd_context*2+1, min_count=1)
-        power = window_mean(power, (psd_context, psd_context))
-    elif psd_context == 0:
-        pass
-    else:
-        raise ValueError(psd_context)
-    return _stable_positive_inverse(power)
-
-
-def abs_square(x):
-    """
-
-    Params:
-        x: np.ndarray
-
-    https://github.com/numpy/numpy/issues/9679
-
-    Bug in numpy 1.13.1
-    >> np.ones(32768).imag ** 2
-    Traceback (most recent call last):
-    ...
-    ValueError: output array is read-only
-    >> np.ones(32767).imag ** 2
-    array([ 0.,  0.,  0., ...,  0.,  0.,  0.])
-
-    >>> abs_square(np.ones(32768)).shape
-    (32768,)
-    >>> abs_square(np.ones(32768, dtype=np.complex64)).shape
-    (32768,)
-    """
-
-    if cp.iscomplexobj(x):
-        return x.real**2 + x.imag**2
-    else:
-        return x**2
-
-
-def window_mean(x, lr_context, axis=-1):
-    """
-    Take the mean of x at each index with a left and right context.
-    Pseudo code for lr_context == (1, 1):
-        y = np.zeros(...)
-        for i in range(...):
-            if not edge_case(i):
-                y[i] = (x[i - 1] + x[i] + x[i + 1]) / 3
-            elif i == 0:
-                y[i] = (x[i] + x[i + 1]) / 2
-            else:
-                y[i] = (x[i - 1] + x[i]) / 2
-        return y
-
-    >>> window_mean([1, 1, 1, 1, 1], 1)
-    array([1., 1., 1., 1., 1.])
-    >>> window_mean([1, 2, 3, 4, 5], 1)
-    array([1.5, 2. , 3. , 4. , 4.5])
-    >>> x = [1, 1, 13, 1, 1]
-    >>> np.testing.assert_equal(window_mean(x, (0, 1)), [1, 7, 7, 1, 1])
-    >>> np.testing.assert_equal(window_mean(x, (1, 0)), [1, 1, 7, 7, 1])
-    >>> np.testing.assert_equal(window_mean(x, (0, 2)), [5, 5, 5, 1, 1])
-    >>> np.testing.assert_equal(window_mean(x, (2, 0)), [1, 1, 5, 5, 5])
-    >>> np.testing.assert_equal(window_mean(x, (1, 2)), [5, 4, 4, 5, 1])
-    >>> np.testing.assert_equal(window_mean(x, (2, 1)), [1, 5, 4, 4, 5])
-    >>> np.testing.assert_equal(window_mean(x, (9, 9)), [3.4] * 5)
-
-    >>> x = np.random.normal(size=(20, 50))
-    >>> lr_context = np.random.randint(0, 5, size=2)
-    >>> a = window_mean(x, lr_context, axis=1)
-    >>> b = window_mean(x, lr_context, axis=-1)
-    >>> c = window_mean(x.T, lr_context, axis=0).T
-    >>> d = [window_mean_slow(s, lr_context) for s in x]
-    >>> np.testing.assert_equal(a, b)
-    >>> np.testing.assert_equal(a, c)
-    >>> np.testing.assert_almost_equal(a, d)
-
-    >>> import bottleneck as bn
-    >>> a = window_mean(x, [lr_context[0], 0], axis=-1)
-    >>> b = bn.move_mean(x, lr_context[0] + 1, min_count=1)
-    >>> np.testing.assert_almost_equal(a, b)
-
-    >>> a = window_mean(x, [lr_context[0], 0], axis=0)
-    >>> b = bn.move_mean(x, lr_context[0] + 1, min_count=1, axis=0)
-    >>> np.testing.assert_almost_equal(a, b)
-
-    """
-    if isinstance(lr_context, int):
-        lr_context = [lr_context + 1, lr_context]
-    else:
-        assert len(lr_context) == 2, lr_context
-        tmp_l_context, tmp_r_context = lr_context
-        lr_context = tmp_l_context + 1, tmp_r_context
-
-    x = cp.asarray(x)
-
-    window_length = sum(lr_context)
-    if window_length == 0:
-        return x
-
-    pad_width = np.zeros((x.ndim, 2), dtype=np.int64)
-    pad_width[axis] = lr_context
-
-    first_slice = [slice(None)] * x.ndim
-    first_slice[axis] = slice(sum(lr_context), None)
-    second_slice = [slice(None)] * x.ndim
-    second_slice[axis] = slice(None, -sum(lr_context))
-
-    def foo(x):
-        cumsum = cp.cumsum(cp.pad(x, pad_width, mode="constant"), axis=axis)
-        return cumsum[first_slice] - cumsum[second_slice]
-
-    ones_shape = [1] * x.ndim
-    ones_shape[axis] = x.shape[axis]
-
-    return foo(x) / foo(cp.ones(ones_shape, cp.int64))
-
-
-def _stable_positive_inverse(power):
-    """
-    Calculate the inverse of a positive value.
-    """
-    eps = 1e-10 * cp.max(power)
-    if eps == 0:
-        # Special case when signal is zero.
-        # Does not happen on real data.
-        # This only happens in artificial cases, e.g. redacted signal parts,
-        # where the signal is set to be zero from a human.
-        #
-        # The scale of the power does not matter, so take 1.
-        inverse_power = cp.ones_like(power)
-    else:
-        inverse_power = 1 / cp.maximum(power, eps)
-    return inverse_power

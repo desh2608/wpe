@@ -11,9 +11,9 @@ with open(path.join(here, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="wpe",
+    name="wpe-gpu",
     version="0.1.0",
-    description="Simplified Nara WPE in CuPy",
+    description="GPU-accelerated Nara WPE in CuPy",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/desh2608/wpe",
